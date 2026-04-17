@@ -1,100 +1,118 @@
-# Lab 12 — Complete Production Agent
+# Lab 12 — Production AI Agent
 
-Kết hợp TẤT CẢ những gì đã học trong 1 project hoàn chỉnh.
+Production-ready AI agent kết hợp tất cả concepts: Docker multi-stage, API security, rate limiting, cost guard, health checks, graceful shutdown.
 
-## Checklist Deliverable
+## 🚀 Public URL
 
-- [x] Dockerfile (multi-stage, < 500 MB)
-- [x] docker-compose.yml (agent + redis)
-- [x] .dockerignore
-- [x] Health check endpoint (`GET /health`)
-- [x] Readiness endpoint (`GET /ready`)
-- [x] API Key authentication
-- [x] Rate limiting
-- [x] Cost guard
-- [x] Config từ environment variables
-- [x] Structured logging
-- [x] Graceful shutdown
-- [x] Public URL ready (Railway / Render config)
+- **Railway:** https://06-production.up.railway.app
 
----
-
-## Cấu Trúc
+## 📁 Cấu Trúc
 
 ```
 06-lab-complete/
 ├── app/
-│   ├── main.py         # Entry point — kết hợp tất cả
-│   ├── config.py       # 12-factor config
-│   ├── auth.py         # API Key + JWT
-│   ├── rate_limiter.py # Rate limiting
-│   └── cost_guard.py   # Budget protection
-├── Dockerfile          # Multi-stage, production-ready
-├── docker-compose.yml  # Full stack
-├── railway.toml        # Deploy Railway
-├── render.yaml         # Deploy Render
-├── .env.example        # Template
+│   ├── __init__.py
+│   ├── main.py           # Entry point — tất cả tính năng
+│   ├── config.py          # 12-factor config (env vars)
+│   ├── auth.py            # API Key authentication
+│   ├── rate_limiter.py    # Sliding window rate limiting
+│   └── cost_guard.py      # Daily budget protection
+├── utils/
+│   └── mock_llm.py        # Mock LLM responses
+├── Dockerfile             # Multi-stage, non-root, < 500MB
+├── docker-compose.yml     # Agent + Redis + Nginx (scale 3)
+├── nginx.conf             # Load balancer config
+├── railway.toml           # Railway deploy config
+├── requirements.txt
+├── .env.example           # Template biến môi trường
+├── .env.local             # Local config (KHÔNG commit)
 ├── .dockerignore
-└── requirements.txt
+└── check_production_ready.py  # Script kiểm tra 20/20
 ```
 
----
+## ⚡ Chạy Local
 
-## Chạy Local
+### Cách 1: Docker Compose (3 agents + Redis + Nginx)
 
 ```bash
-# 1. Setup
-cp .env.example .env
+# 1. Copy file config
+cp .env.example .env.local
 
-# 2. Chạy với Docker Compose
-docker compose up
+# 2. Build và chạy
+docker compose build --no-cache
+docker compose up --scale agent=3
 
-# 3. Test
+# 3. Test (port 80 qua Nginx)
 curl http://localhost/health
-
-# 4. Lấy API key từ .env, test endpoint
-API_KEY=$(grep AGENT_API_KEY .env | cut -d= -f2)
-curl -H "X-API-Key: $API_KEY" \
-     -X POST http://localhost/ask \
-     -H "Content-Type: application/json" \
-     -d '{"question": "What is deployment?"}'
+curl http://localhost/ready
+curl -X POST http://localhost/ask \
+  -H "X-API-Key: dev-key-change-me-in-production" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Hello"}'
 ```
 
----
+### Cách 2: PowerShell (Windows)
 
-## Deploy Railway (< 5 phút)
+```powershell
+# Health check
+Invoke-RestMethod -Uri "http://localhost/health"
+
+# Ready check
+Invoke-RestMethod -Uri "http://localhost/ready"
+
+# API call
+Invoke-RestMethod -Uri "http://localhost/ask" -Method POST `
+  -Headers @{"X-API-Key"="dev-key-change-me-in-production"; "Content-Type"="application/json"} `
+  -Body '{"question": "Hello"}'
+```
+
+## ☁️ Deploy lên Railway
 
 ```bash
-# Cài Railway CLI
+# 1. Cài Railway CLI
 npm i -g @railway/cli
 
-# Login và deploy
+# 2. Login
 railway login
+
+# 3. Tạo project
 railway init
-railway variables set OPENAI_API_KEY=sk-...
-railway variables set AGENT_API_KEY=your-secret-key
+
+# 4. Set biến môi trường
+railway variables set PORT=8000
+railway variables set ENVIRONMENT=production
+railway variables set AGENT_API_KEY=your-secret-api-key
+railway variables set JWT_SECRET=your-jwt-secret
+
+# 5. Deploy
 railway up
 
-# Nhận public URL!
+# 6. Lấy public URL
 railway domain
 ```
 
----
+## 🔒 Security Features
 
-## Deploy Render
+| Feature | Mô tả |
+|---------|--------|
+| **API Key Auth** | Header `X-API-Key` bắt buộc, 401 nếu thiếu |
+| **Rate Limiting** | Sliding window, 20 req/min mặc định |
+| **Cost Guard** | Giới hạn $5/ngày, block khi vượt budget |
+| **Security Headers** | X-Content-Type-Options, X-Frame-Options |
+| **Non-root Docker** | Container chạy user `agent`, không phải root |
 
-1. Push repo lên GitHub
-2. Render Dashboard → New → Blueprint
-3. Connect repo → Render đọc `render.yaml`
-4. Set secrets: `OPENAI_API_KEY`, `AGENT_API_KEY`
-5. Deploy → Nhận URL!
+## 🏥 Health & Operations
 
----
+| Endpoint | Mô tả |
+|----------|--------|
+| `GET /health` | Liveness probe — platform restart nếu fail |
+| `GET /ready` | Readiness probe — load balancer ngừng route nếu 503 |
+| `GET /metrics` | Thống kê (cần API key) |
+| `GET /docs` | Swagger UI (chỉ có ở dev mode) |
 
-## Kiểm Tra Production Readiness
+## ✅ Production Readiness
 
-```bash
-python check_production_ready.py
 ```
-
-Script này kiểm tra tất cả items trong checklist và báo cáo những gì còn thiếu.
+20/20 checks passed (100%)
+🎉 PRODUCTION READY!
+```
